@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from streamlit_plotly_events import plotly_events
 
 st.set_page_config(
     page_title="Enquiry Master Dashboard",
@@ -8,7 +9,13 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📊 Enquiry Master Analytics Dashboard")
+st.title("📊 Enquiry Master Analytics Dashboard (Interactive Drilldown)")
+
+# --- Initialize Session State for Drilldowns ---
+if 'drill_sales_exec' not in st.session_state:
+    st.session_state.drill_sales_exec = None
+if 'drill_customer' not in st.session_state:
+    st.session_state.drill_customer = None
 
 # --- DATA LOADING & PREPROCESSING ---
 @st.cache_data(ttl=600)
@@ -20,15 +27,15 @@ def load_data():
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip()
     
-    # Clean QTY and Rate (remove commas/spaces)
+    # Clean QTY and Rate
     df['QTY'] = pd.to_numeric(df['QTY'].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
     df['Rate'] = pd.to_numeric(df['Rate'].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
     df['Amount'] = df['QTY'] * df['Rate']
     
-    # Correct Date Parsing for MM/DD/YYYY format (matches Google Sheet)
+    # Correct Date Parsing for MM/DD/YYYY format
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=False, errors='coerce')
     
-    # Fast optimized reply variance calculation
+    # Fast reply variance calculation
     def calc_reply_time(row):
         try:
             if pd.isna(row['Date']) or pd.isna(row['EnquiryReceivedTime']) or pd.isna(row['ReplyTime']):
@@ -86,12 +93,17 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.header("🔍 Dynamic Filters")
 
-se_filter = st.sidebar.multiselect("Sales Executive", sorted(data['SalesExecutive'].dropna().unique()))
-cust_filter = st.sidebar.multiselect("Customer Name", sorted(data['CustomerName'].dropna().unique()))
+se_filter = st.sidebar.multiselect("Sales Executive", sorted(data['SalesExecutive'].dropna().unique()), default=st.session_state.drill_sales_exec if st.session_state.drill_sales_exec else [])
+cust_filter = st.sidebar.multiselect("Customer Name", sorted(data['CustomerName'].dropna().unique()), default=st.session_state.drill_customer if st.session_state.drill_customer else [])
 cat_filter = st.sidebar.multiselect("Category", sorted(data['Category'].dropna().unique()))
 grade_filter = st.sidebar.multiselect("Grade", sorted(data['Grade'].dropna().unique()))
 mat_filter = st.sidebar.multiselect("Material Availability", sorted(data['MaterialAvailability'].dropna().unique()))
 status_filter = st.sidebar.multiselect("Status", sorted(data['Status'].dropna().unique()))
+
+if st.sidebar.button("🔄 Reset Drilldown Selections"):
+    st.session_state.drill_sales_exec = None
+    st.session_state.drill_customer = None
+    st.rerun()
 
 def apply_filters(df):
     d = df.copy()
@@ -138,8 +150,9 @@ if compare_mode_active:
 
 st.markdown("---")
 
-# --- CHARTS ---
+# --- INTERACTIVE CHARTS WITH DRILLDOWN EVENTS ---
 col1, col2 = st.columns(2)
+
 with col1:
     st.subheader("📍 Enquiry Source Distribution ('Through')")
     through_df = df_filtered.groupby('Through').size().reset_index(name='Count')
@@ -148,19 +161,27 @@ with col1:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 with col2:
-    st.subheader("🧑‍💼 Sales Executive Wise Enquiry Quantity")
+    st.subheader("🧑‍💼 Sales Executive Wise Enquiry Quantity (Click to Drilldown)")
     se_qty = df_filtered.groupby('SalesExecutive')['QTY'].sum().reset_index()
     fig_bar = px.bar(se_qty, x='SalesExecutive', y='QTY', text='QTY')
     fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-    st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # Capture click event on Sales Executive bar chart
+    se_clicked = plotly_events(fig_bar, click_event=True, select_event=False, key="se_chart")
+    if se_clicked:
+        clicked_x = se_clicked[0]['x']
+        if st.session_state.drill_sales_exec != [clicked_x]:
+            st.session_state.drill_sales_exec = [clicked_x]
+            st.rerun()
 
 st.markdown("---")
 
-# Limit heavy customer charts to top 15 by Qty for clean UI and speed
+# Limit heavy customer charts to top 15 by Qty
 top_customers = df_filtered.groupby('CustomerName')['QTY'].sum().nlargest(15).index
 df_top_cust = df_filtered[df_filtered['CustomerName'].isin(top_customers)]
 
 col3, col4 = st.columns(2)
+
 with col3:
     st.subheader("📦 Top Customer Wise Category Qty")
     cust_cat = df_top_cust.groupby(['CustomerName', 'Category'])['QTY'].sum().reset_index()
@@ -178,12 +199,20 @@ with col4:
 st.markdown("---")
 
 col5, col6 = st.columns(2)
+
 with col5:
-    st.subheader("🏬 Top Customer Material Availability Qty")
+    st.subheader("🏬 Top Customer Material Availability Qty (Click to Drilldown)")
     cust_mat = df_top_cust.groupby(['CustomerName', 'MaterialAvailability'])['QTY'].sum().reset_index()
     fig_cm = px.bar(cust_mat, x='CustomerName', y='QTY', color='MaterialAvailability', barmode='group')
     fig_cm.update_layout(xaxis_tickangle=-45)
-    st.plotly_chart(fig_cm, use_container_width=True)
+    
+    # Capture click event on Customer chart
+    cust_clicked = plotly_events(fig_cm, click_event=True, select_event=False, key="cust_chart")
+    if cust_clicked:
+        clicked_cust = cust_clicked[0]['x']
+        if st.session_state.drill_customer != [clicked_cust]:
+            st.session_state.drill_customer = [clicked_cust]
+            st.rerun()
 
 with col6:
     st.subheader("📊 Sales Executive Wise Status Qty")
@@ -195,6 +224,7 @@ with col6:
 st.markdown("---")
 
 col7, col8 = st.columns(2)
+
 with col7:
     st.subheader("📋 Top Customer Material Status Count")
     cust_mc = df_top_cust.groupby(['CustomerName', 'MaterialAvailability']).size().reset_index(name='EnquiryCount')

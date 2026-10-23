@@ -20,15 +20,15 @@ def load_data():
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip()
     
-    # Clean QTY and Rate
+    # Clean QTY and Rate (remove commas/spaces)
     df['QTY'] = pd.to_numeric(df['QTY'].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
     df['Rate'] = pd.to_numeric(df['Rate'].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
     df['Amount'] = df['QTY'] * df['Rate']
     
-    # Robust Date Parsing
-    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
+    # Robust Date Parsing (Infer format automatically to match Looker Studio)
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     
-    # Fast vectorized/optimized reply variance calculation
+    # Fast vectorized reply variance calculation
     def calc_reply_time(row):
         try:
             if pd.isna(row['Date']) or pd.isna(row['EnquiryReceivedTime']) or pd.isna(row['ReplyTime']):
@@ -156,7 +156,7 @@ with col2:
 
 st.markdown("---")
 
-# Limiting to top 15 customers for customer-heavy charts to prevent browser lag
+# Limit heavy customer-wise charts to top 15 by Qty for clean UI and speed
 top_customers = df_filtered.groupby('CustomerName')['QTY'].sum().nlargest(15).index
 df_top_cust = df_filtered[df_filtered['CustomerName'].isin(top_customers)]
 

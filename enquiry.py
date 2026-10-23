@@ -25,10 +25,10 @@ def load_data():
     df['Rate'] = pd.to_numeric(df['Rate'].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
     df['Amount'] = df['QTY'] * df['Rate']
     
-    # Robust Date Parsing (Infer format automatically to match Looker Studio)
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    # Correct Date Parsing for MM/DD/YYYY format (matches Google Sheet)
+    df['Date'] = pd.to_datetime(df['Date'], dayfirst=False, errors='coerce')
     
-    # Fast vectorized reply variance calculation
+    # Fast optimized reply variance calculation
     def calc_reply_time(row):
         try:
             if pd.isna(row['Date']) or pd.isna(row['EnquiryReceivedTime']) or pd.isna(row['ReplyTime']):
@@ -156,7 +156,7 @@ with col2:
 
 st.markdown("---")
 
-# Limit heavy customer-wise charts to top 15 by Qty for clean UI and speed
+# Limit heavy customer charts to top 15 by Qty for clean UI and speed
 top_customers = df_filtered.groupby('CustomerName')['QTY'].sum().nlargest(15).index
 df_top_cust = df_filtered[df_filtered['CustomerName'].isin(top_customers)]
 
@@ -186,10 +186,10 @@ with col5:
     st.plotly_chart(fig_cm, use_container_width=True)
 
 with col6:
-    st.subheader("📊 Sales Executive Wise Status")
-    se_status = df_filtered.groupby(['SalesExecutive', 'Status']).size().reset_index(name='Count')
-    fig_ss = px.bar(se_status, x='SalesExecutive', y='Count', color='Status', barmode='stack', text='Count')
-    fig_ss.update_traces(texttemplate='%{text}', textposition='outside')
+    st.subheader("📊 Sales Executive Wise Status Qty")
+    se_status = df_filtered.groupby(['SalesExecutive', 'Status'])['QTY'].sum().reset_index()
+    fig_ss = px.bar(se_status, x='SalesExecutive', y='QTY', color='Status', barmode='stack', text='QTY')
+    fig_ss.update_traces(texttemplate='%{text:.1f}', textposition='outside')
     st.plotly_chart(fig_ss, use_container_width=True)
 
 st.markdown("---")

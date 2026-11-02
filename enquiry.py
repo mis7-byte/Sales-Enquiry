@@ -117,7 +117,6 @@ else:
     df_p2 = apply_filters(df_p2_raw)
     df_filtered = pd.concat([df_p1, df_p2])
     
-    # Tag periods for comparison charts
     df_p1_comp = df_p1.copy()
     df_p1_comp['Period'] = 'Period 1'
     df_p2_comp = df_p2.copy()
@@ -152,7 +151,7 @@ if compare_mode_active:
 
 st.markdown("---")
 
-# --- CHARTS (WITH SIDE-BY-SIDE PERIOD COMPARISON SUPPORT) ---
+# --- CHARTS ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Enquiry Source Distribution ('Through')")
@@ -179,6 +178,21 @@ with col2:
         fig_bar = px.bar(se_comp, x='SalesExecutive', y='QTY', color='Period', barmode='group', text='QTY')
         fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
         st.plotly_chart(fig_bar, use_container_width=True)
+
+st.markdown("---")
+
+# --- NEW: CATEGORY WISE QTY CHART ---
+st.subheader("📂 Category Wise Qty")
+if not compare_mode_active:
+    cat_qty = df_filtered.groupby('Category')['QTY'].sum().reset_index()
+    fig_cat = px.bar(cat_qty, x='Category', y='QTY', text='QTY')
+    fig_cat.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+else:
+    cat_comp = df_compare_all.groupby(['Category', 'Period'])['QTY'].sum().reset_index()
+    fig_cat = px.bar(cat_comp, x='Category', y='QTY', color='Period', barmode='group', text='QTY')
+    fig_cat.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+fig_cat.update_layout(xaxis_tickangle=-45)
+st.plotly_chart(fig_cat, use_container_width=True)
 
 st.markdown("---")
 

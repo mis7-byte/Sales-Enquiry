@@ -127,10 +127,6 @@ kpi3.metric("Total Grades", f"{df_filtered['Grade'].nunique():,}")
 kpi4.metric("Total Qty", f"{df_filtered['QTY'].sum():,.2f}")
 kpi5.metric("Total Amount", f"${df_filtered['Amount'].sum():,.2f}")
 
-# Optional Debug Info for Material Availability 'NO' sum verification
-qty_no_sum = df_filtered[df_filtered['MaterialAvailability'].str.upper() == 'NO']['QTY'].sum()
-st.caption(f"🔍 *Quick Info: Filtered Qty where Material Availability = 'NO' is **{qty_no_sum:,.2f}***")
-
 if compare_mode_active:
     st.markdown("---")
     st.subheader("📈 Period-Over-Period Date Variance Analysis")
@@ -192,7 +188,8 @@ col5, col6 = st.columns(2)
 with col5:
     st.subheader("🏬 Top Customer Material Availability Qty")
     cust_mat = df_top_cust.groupby(['CustomerName', 'MaterialAvailability'])['QTY'].sum().reset_index()
-    fig_cm = px.bar(cust_mat, x='CustomerName', y='QTY', color='MaterialAvailability', barmode='group')
+    fig_cm = px.bar(cust_mat, x='CustomerName', y='QTY', color='MaterialAvailability', barmode='group', text='QTY')
+    fig_cm.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     fig_cm.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_cm, use_container_width=True)
 

@@ -145,7 +145,7 @@ if compare_mode_active:
 
 st.markdown("---")
 
-# --- CHARTS (WITH VARIANCE MAPPING IF COMPARE MODE ACTIVE) ---
+# --- CHARTS ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Enquiry Source Distribution ('Through')")
@@ -161,13 +161,16 @@ with col2:
         fig_bar = px.bar(se_qty, x='SalesExecutive', y='QTY', text='QTY')
         fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     else:
-        se_p1 = df_p1.groupby('SalesExecutive')['QTY'].sum().reset_index(name='QTY_P1')
-        se_p2 = df_p2.groupby('SalesExecutive')['QTY'].sum().reset_index(name='QTY_P2')
+        se_p1 = df_p1.groupby('SalesExecutive')['QTY'].sum().reset_index(name='Period 1')
+        se_p2 = df_p2.groupby('SalesExecutive')['QTY'].sum().reset_index(name='Period 2')
         se_comp = pd.merge(se_p1, se_p2, on='SalesExecutive', how='outer').fillna(0)
-        se_comp['Variance'] = se_comp['QTY_P2'] - se_comp['QTY_P1']
         
-        fig_bar = px.bar(se_comp, x='SalesExecutive', y='Variance', text='Variance', 
-                         title="Sales Executive Qty Variance (Period 2 vs Period 1)")
+        # Melt dataframe to create side-by-side grouped bars for Period 1 and Period 2
+        se_melted = se_comp.melt(id_vars='SalesExecutive', value_vars=['Period 1', 'Period 2'], 
+                                   var_name='Period', value_name='QTY')
+        
+        fig_bar = px.bar(se_melted, x='SalesExecutive', y='QTY', color='Period', barmode='group', text='QTY',
+                         title="Sales Executive Qty Comparison (Period 1 vs Period 2)")
         fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     st.plotly_chart(fig_bar, use_container_width=True)
 

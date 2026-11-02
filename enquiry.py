@@ -20,19 +20,19 @@ def load_data():
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip()
     
-    # Clean text fields from leading/trailing whitespaces to avoid data fragmentation
+    # Clean text fields
     text_cols = ['CustomerName', 'SalesExecutive', 'Category', 'Grade', 'MaterialAvailability', 'Status', 'Through']
     for col in text_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
             df.loc[df[col].isin(['nan', 'NaN', 'None', '']), col] = 'Unknown'
 
-    # Clean QTY and Rate (remove commas/spaces)
+    # Clean QTY and Rate
     df['QTY'] = pd.to_numeric(df['QTY'].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
     df['Rate'] = pd.to_numeric(df['Rate'].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
     df['Amount'] = df['QTY'] * df['Rate']
     
-    # Correct Date Parsing for MM/DD/YYYY format (matches Google Sheet)
+    # Correct Date Parsing for MM/DD/YYYY format
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=False, errors='coerce')
     
     # Fast optimized reply variance calculation
@@ -145,7 +145,7 @@ if compare_mode_active:
 
 st.markdown("---")
 
-# --- CHARTS ---
+# --- CHARTS (WITH VARIANCE MAPPING IF COMPARE MODE ACTIVE) ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Enquiry Source Distribution ('Through')")
@@ -156,9 +156,19 @@ with col1:
 
 with col2:
     st.subheader("🧑‍💼 Sales Executive Wise Enquiry Quantity")
-    se_qty = df_filtered.groupby('SalesExecutive')['QTY'].sum().reset_index()
-    fig_bar = px.bar(se_qty, x='SalesExecutive', y='QTY', text='QTY')
-    fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    if not compare_mode_active:
+        se_qty = df_filtered.groupby('SalesExecutive')['QTY'].sum().reset_index()
+        fig_bar = px.bar(se_qty, x='SalesExecutive', y='QTY', text='QTY')
+        fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    else:
+        se_p1 = df_p1.groupby('SalesExecutive')['QTY'].sum().reset_index(name='QTY_P1')
+        se_p2 = df_p2.groupby('SalesExecutive')['QTY'].sum().reset_index(name='QTY_P2')
+        se_comp = pd.merge(se_p1, se_p2, on='SalesExecutive', how='outer').fillna(0)
+        se_comp['Variance'] = se_comp['QTY_P2'] - se_comp['QTY_P1']
+        
+        fig_bar = px.bar(se_comp, x='SalesExecutive', y='Variance', text='Variance', 
+                         title="Sales Executive Qty Variance (Period 2 vs Period 1)")
+        fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     st.plotly_chart(fig_bar, use_container_width=True)
 
 st.markdown("---")

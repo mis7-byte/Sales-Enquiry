@@ -116,6 +116,13 @@ else:
     df_p1 = apply_filters(df_p1_raw)
     df_p2 = apply_filters(df_p2_raw)
     df_filtered = pd.concat([df_p1, df_p2])
+    
+    # Tag periods for comparison charts
+    df_p1_comp = df_p1.copy()
+    df_p1_comp['Period'] = 'Period 1'
+    df_p2_comp = df_p2.copy()
+    df_p2_comp['Period'] = 'Period 2'
+    df_compare_all = pd.concat([df_p1_comp, df_p2_comp])
 
 # --- KPI METRICS ---
 st.markdown("### 📌 Key Performance Indicators (KPIs)")
@@ -145,14 +152,20 @@ if compare_mode_active:
 
 st.markdown("---")
 
-# --- CHARTS ---
+# --- CHARTS (WITH SIDE-BY-SIDE PERIOD COMPARISON SUPPORT) ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Enquiry Source Distribution ('Through')")
-    through_df = df_filtered.groupby('Through').size().reset_index(name='Count')
-    fig_pie = px.pie(through_df, names='Through', values='Count', hole=0.4)
-    fig_pie.update_traces(textinfo='label+percent', textposition='outside')
-    st.plotly_chart(fig_pie, use_container_width=True)
+    if not compare_mode_active:
+        through_df = df_filtered.groupby('Through').size().reset_index(name='Count')
+        fig_pie = px.pie(through_df, names='Through', values='Count', hole=0.4)
+        fig_pie.update_traces(textinfo='label+percent', textposition='outside')
+        st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        through_comp = df_compare_all.groupby(['Through', 'Period']).size().reset_index(name='Count')
+        fig_through = px.bar(through_comp, x='Through', y='Count', color='Period', barmode='group', text='Count')
+        fig_through.update_traces(texttemplate='%{text}', textposition='outside')
+        st.plotly_chart(fig_through, use_container_width=True)
 
 with col2:
     st.subheader("🧑‍💼 Sales Executive Wise Enquiry Quantity")
@@ -160,38 +173,40 @@ with col2:
         se_qty = df_filtered.groupby('SalesExecutive')['QTY'].sum().reset_index()
         fig_bar = px.bar(se_qty, x='SalesExecutive', y='QTY', text='QTY')
         fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        st.plotly_chart(fig_bar, use_container_width=True)
     else:
-        se_p1 = df_p1.groupby('SalesExecutive')['QTY'].sum().reset_index(name='Period 1')
-        se_p2 = df_p2.groupby('SalesExecutive')['QTY'].sum().reset_index(name='Period 2')
-        se_comp = pd.merge(se_p1, se_p2, on='SalesExecutive', how='outer').fillna(0)
-        
-        # Melt dataframe to create side-by-side grouped bars for Period 1 and Period 2
-        se_melted = se_comp.melt(id_vars='SalesExecutive', value_vars=['Period 1', 'Period 2'], 
-                                   var_name='Period', value_name='QTY')
-        
-        fig_bar = px.bar(se_melted, x='SalesExecutive', y='QTY', color='Period', barmode='group', text='QTY',
-                         title="Sales Executive Qty Comparison (Period 1 vs Period 2)")
+        se_comp = df_compare_all.groupby(['SalesExecutive', 'Period'])['QTY'].sum().reset_index()
+        fig_bar = px.bar(se_comp, x='SalesExecutive', y='QTY', color='Period', barmode='group', text='QTY')
         fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-    st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
 st.markdown("---")
 
 # Limit heavy customer charts to top 15 by Qty for clean UI and speed
-top_customers = df_filtered.groupby('CustomerName')['QTY'].sum().nlargest(15).index
-df_top_cust = df_filtered[df_filtered['CustomerName'].isin(top_customers)]
+active_df_for_top = df_compare_all if compare_mode_active else df_filtered
+top_customers = active_df_for_top.groupby('CustomerName')['QTY'].sum().nlargest(15).index
+df_top_cust = active_df_for_top[active_df_for_top['CustomerName'].isin(top_customers)]
 
 col3, col4 = st.columns(2)
 with col3:
     st.subheader("📦 Top Customer Wise Category Qty")
-    cust_cat = df_top_cust.groupby(['CustomerName', 'Category'])['QTY'].sum().reset_index()
-    fig_cc = px.bar(cust_cat, x='CustomerName', y='QTY', color='Category', barmode='stack')
+    if not compare_mode_active:
+        cust_cat = df_top_cust.groupby(['CustomerName', 'Category'])['QTY'].sum().reset_index()
+        fig_cc = px.bar(cust_cat, x='CustomerName', y='QTY', color='Category', barmode='stack')
+    else:
+        cust_cat = df_top_cust.groupby(['CustomerName', 'Category', 'Period'])['QTY'].sum().reset_index()
+        fig_cc = px.bar(cust_cat, x='CustomerName', y='QTY', color='Category', barmode='stack', facet_col='Period')
     fig_cc.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_cc, use_container_width=True)
 
 with col4:
     st.subheader("🏷️ Top Customer Wise Grade Qty")
-    cust_grade = df_top_cust.groupby(['CustomerName', 'Grade'])['QTY'].sum().reset_index()
-    fig_cg = px.bar(cust_grade, x='CustomerName', y='QTY', color='Grade', barmode='stack')
+    if not compare_mode_active:
+        cust_grade = df_top_cust.groupby(['CustomerName', 'Grade'])['QTY'].sum().reset_index()
+        fig_cg = px.bar(cust_grade, x='CustomerName', y='QTY', color='Grade', barmode='stack')
+    else:
+        cust_grade = df_top_cust.groupby(['CustomerName', 'Grade', 'Period'])['QTY'].sum().reset_index()
+        fig_cg = px.bar(cust_grade, x='CustomerName', y='QTY', color='Grade', barmode='stack', facet_col='Period')
     fig_cg.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_cg, use_container_width=True)
 
@@ -200,16 +215,24 @@ st.markdown("---")
 col5, col6 = st.columns(2)
 with col5:
     st.subheader("🏬 Top Customer Material Availability Qty")
-    cust_mat = df_top_cust.groupby(['CustomerName', 'MaterialAvailability'])['QTY'].sum().reset_index()
-    fig_cm = px.bar(cust_mat, x='CustomerName', y='QTY', color='MaterialAvailability', barmode='group', text='QTY')
+    if not compare_mode_active:
+        cust_mat = df_top_cust.groupby(['CustomerName', 'MaterialAvailability'])['QTY'].sum().reset_index()
+        fig_cm = px.bar(cust_mat, x='CustomerName', y='QTY', color='MaterialAvailability', barmode='group', text='QTY')
+    else:
+        cust_mat = df_top_cust.groupby(['CustomerName', 'MaterialAvailability', 'Period'])['QTY'].sum().reset_index()
+        fig_cm = px.bar(cust_mat, x='CustomerName', y='QTY', color='MaterialAvailability', barmode='group', facet_col='Period', text='QTY')
     fig_cm.update_traces(texttemplate='%{text:.2f}', textposition='outside')
     fig_cm.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_cm, use_container_width=True)
 
 with col6:
     st.subheader("📊 Sales Executive Wise Status Qty")
-    se_status = df_filtered.groupby(['SalesExecutive', 'Status'])['QTY'].sum().reset_index()
-    fig_ss = px.bar(se_status, x='SalesExecutive', y='QTY', color='Status', barmode='stack', text='QTY')
+    if not compare_mode_active:
+        se_status = df_filtered.groupby(['SalesExecutive', 'Status'])['QTY'].sum().reset_index()
+        fig_ss = px.bar(se_status, x='SalesExecutive', y='QTY', color='Status', barmode='stack', text='QTY')
+    else:
+        se_status = df_compare_all.groupby(['SalesExecutive', 'Status', 'Period'])['QTY'].sum().reset_index()
+        fig_ss = px.bar(se_status, x='SalesExecutive', y='QTY', color='Status', barmode='stack', facet_col='Period', text='QTY')
     fig_ss.update_traces(texttemplate='%{text:.1f}', textposition='outside')
     st.plotly_chart(fig_ss, use_container_width=True)
 
@@ -218,8 +241,12 @@ st.markdown("---")
 col7, col8 = st.columns(2)
 with col7:
     st.subheader("⏱️ Sales Executive Avg Reply Time (Minutes)")
-    se_reply = df_filtered.groupby('SalesExecutive')['Reply_Variance_Mins'].mean().reset_index().round(2)
-    fig_rep = px.bar(se_reply, x='SalesExecutive', y='Reply_Variance_Mins', text='Reply_Variance_Mins')
+    if not compare_mode_active:
+        se_reply = df_filtered.groupby('SalesExecutive')['Reply_Variance_Mins'].mean().reset_index().round(2)
+        fig_rep = px.bar(se_reply, x='SalesExecutive', y='Reply_Variance_Mins', text='Reply_Variance_Mins')
+    else:
+        se_reply = df_compare_all.groupby(['SalesExecutive', 'Period'])['Reply_Variance_Mins'].mean().reset_index().round(2)
+        fig_rep = px.bar(se_reply, x='SalesExecutive', y='Reply_Variance_Mins', color='Period', barmode='group', text='Reply_Variance_Mins')
     fig_rep.update_traces(texttemplate='%{text}m', textposition='outside')
     st.plotly_chart(fig_rep, use_container_width=True)
 
